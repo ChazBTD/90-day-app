@@ -59,10 +59,14 @@ def save_local_creds(user_id, password):
 
 def load_local_creds():
     if os.path.exists(CRED_FILE):
-        with open(CRED_FILE, "r") as f:
-            creds = json.load(f)
-            return creds["user_id"], creds["password"]
+        try:
+            with open(CRED_FILE, "r") as f:
+                creds = json.load(f)
+                return creds.get("user_id"), creds.get("password")
+        except json.JSONDecodeError:
+            return None, None  # corrupted or empty file
     return None, None
+
 
 def clear_local_creds():
     if os.path.exists(CRED_FILE):
