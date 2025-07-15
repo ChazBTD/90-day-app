@@ -237,7 +237,7 @@ def render_login_page():
     st.image("image1.png", width=800)
     st.markdown("**☝️ save this page so you don't have to re-login**")
 
-    if "access_token" in st.query_params and "refresh_token" in st.query_params:
+    if "access_token" in st.query_params and "refresh_token" in st.query_params and "username" not in st.session_state:
         at = st.query_params["access_token"]
         rt = st.query_params["refresh_token"]
 

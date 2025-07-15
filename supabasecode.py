@@ -15,9 +15,10 @@ def get_supabase():
 
 supabase = get_supabase()
 
-def signup_or_login(username, password):
+def signup_or_login(email: str, password):
     """Create user if new; otherwise validate password. Uses Supabase auth token."""
     try:
+        username = email.strip().lower()
         result = supabase.auth.sign_in_with_password({"email": username, "password": password})
     except Exception:
         result = supabase.auth.sign_up({"email": username, "password": password})
