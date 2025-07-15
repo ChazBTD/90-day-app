@@ -1,23 +1,24 @@
+#This is roadmap.py
+
 import streamlit as st
 import math
 import time
+import datetime as _dt
 
 #this has to come before st.cache and other stuff is initiated
 st.set_page_config(page_title="90-Day Goal Engineer", layout="wide", initial_sidebar_state="collapsed")
 
 
 from generation import plan, parse, inline_text_input, render_footer, test_structure_dictionary
-from milestone import render_milestone_page, update_progress
-from milestone import render_day_block, render_week_block  
-from supabasecode import signup_or_login, load_plan, save_plan, save_local_creds, load_local_creds, clear_local_creds
+from milestone import render_day_block, render_week_block, update_progress
+from supabasecode import signup_or_login, load_plan, save_plan, set_start_date
+from supabasecode import supabase
 
-# Navigate to a specific week’s milestone page
-def show_milestone_page(week_num, milestone_text):
-    st.session_state.page = 'milestone'
-    st.session_state.selected_milestone = {
-        'number': week_num,
-        'text': milestone_text
-    }
+def compute_day_week():
+    delta = (_dt.date.today() - st.session_state.start_date).days
+    delta = max(0, delta)                        # never negative
+    st.session_state.current_week = delta // 7 + 1
+    st.session_state.current_day  = delta % 7 + 1
 
 # 1) Render the “input” page where user defines super goal, profile, etc.
 def render_input_page():
@@ -60,8 +61,11 @@ def render_input_page():
 
         if st.session_state.super_goal:
             with st.spinner("Be Patient..."):
+                #CALLING the PLAN with one necesary variable
                 raw_text = plan(st.session_state.super_goal, st.session_state.profile, month_structure)
                 if raw_text:
+                    #first clear all daily actions
+                    st.session_state.all_weeks = {}
                     st.session_state.raw_text = raw_text
                     parsed_plan = parse(raw_text)
                     st.session_state.months = parsed_plan["month_list"]
@@ -74,71 +78,6 @@ def render_input_page():
 
     render_footer()
 
-# 2) Render the “roadmap” page with clickable weeks
-def render_roadmap_page():
-    st.title("🎯 90-Day Goal Engineer")
-    if st.button("Create New Plan", key="new_plan_button"):
-        st.success("new plan started")
-        time.sleep(2)
-        st.session_state.page = 'input'
-        st.rerun()
-    if st.button("Sign Out Completely", key="roadmap_sign_out_button"):
-        sign_out()
-    st.image("image1.png", caption="Roadmap reference", width=1000)
-    st.markdown("---")
-    st.header("Your 90-Day Road")
-
-    cols = st.columns(3)
-    for i in range(1, 4):
-        col = cols[i - 1]
-        col.subheader(f"Month {i}")
-        month_action = st.session_state.months.get(f"Month {i}", "No Action")
-        if len(month_action) <= 35:
-            col.markdown(f"## {month_action}<br>", unsafe_allow_html=True)
-        else:
-            col.markdown(f"## {month_action}")
-
-        for j in range(1, 5):
-            week_num = (i - 1) * 4 + j
-            week_container = col.container(border=True)
-
-            if week_num == int(st.session_state.current_week):
-                week_container.markdown(f"**:large_green_circle: Week {week_num}**")
-            else:
-                week_container.markdown(f"**Week {week_num}**")
-
-            #the week milestone text
-            week_action = st.session_state.weeks.get(f"Week {week_num}", "No milestone here")
-
-            week_container.button(
-                week_action,
-                key=f"week_{week_num}_button",
-                on_click=show_milestone_page,
-                args=(week_num, week_action)
-            )
-
-            # Show a progress message under each week, if applicable
-            week_key = f"Week_{week_num}"
-            if week_key in st.session_state.milestone_progress:
-                progress = st.session_state.milestone_progress[week_key]
-                progress_messages = [
-                    (20, "Starting up 👏"),
-                    (50, "Keep going 🤜"),
-                    (70, "Getting there 🥊"),
-                    (99, "Last push 🚀"),
-                    (100, "Complete ✅")
-                ]
-                for threshold, message in progress_messages:
-                    if progress <= threshold:
-                        week_container.markdown(f"Current progress: {message}")
-                        break
-
-    if st.session_state.raw_text:
-        with st.expander("Show Raw AI Response and lists"):
-            st.text(st.session_state.raw_text)
-            st.text(st.session_state.weeks)
-            st.text(st.session_state.months)
-
 # This comes before the roadmap at all times
 def show_progress_boss():
     week_num = st.session_state.current_week
@@ -147,7 +86,7 @@ def show_progress_boss():
 
     #BOSS state based on completed/total tasks made PROGRESS
     st.markdown(f"## Your boss for Week {week_num} Day {day_num}")
-    update_progress(week_key)
+    update_progress(week_key, False)
     percentage = st.session_state.milestone_progress.get(week_key, 0)
     if percentage == 100:
         st.image("state3.png", width=300)
@@ -179,102 +118,143 @@ def render_dashboard():
     st.title("🎯 90-Day Goal Engineer")
     
     if st.button("Create New Plan", key="new_plan_button"):
-        st.success("new plan started")
+        st.info("new plan started")
         time.sleep(2)
         st.session_state.page = 'input'
         st.rerun()
     if st.button("Sign Out Completely", key="roadmap_sign_out_button"):
         sign_out() 
 
-    #Top-level page with tabs: Full ▸ Month ▸ Week ▸ Today"""
-    # ── controls always visible ───────────────────────────
-    cols = st.columns(2)
-    with cols[0]:
-        st.session_state.current_week = st.number_input(
-            "Current week", 1, 12, int(st.session_state.current_week),
-            key="current_week_dash"
-        )
-    with cols[1]:
-        st.session_state.current_day = st.number_input(
-            "Current day", 1, 7, int(st.session_state.current_day),
-            key="current_day_dash"
-        )
+    compute_day_week()
+    st.markdown(
+        f"### 📆 Day **{st.session_state.current_day}**  |  "
+        f"Week **{st.session_state.current_week}**"
+    )
+    col_b, col_r, col_f = st.columns(3)
+
+    if col_b.button("⬅️ Back 1 day"):
+        new_start = st.session_state.start_date + _dt.timedelta(days=1)
+        set_start_date(st.session_state.username, new_start)
+        st.session_state.start_date = new_start
+        st.rerun()
+
+    if col_r.button("🔄 Reset Day 1 → Today"):
+        today = _dt.date.today()
+        set_start_date(st.session_state.username, today)
+        st.session_state.start_date = today
+        st.rerun()
+
+    if col_f.button("➡️ Forward 1 day"):
+        new_start = st.session_state.start_date - _dt.timedelta(days=1)
+        set_start_date(st.session_state.username, new_start)
+        st.session_state.start_date = new_start
+        st.rerun()
+
 
     #NOT show if day view using psuedocode selection
-    show_progress_boss()
+    if st.session_state.active_view == "full" or st.session_state.active_view == "month" or st.session_state.active_view == "week":
+        show_progress_boss()
 
-    # ── choose view ───────────────────────────────────────
-    tab_full, tab_month, tab_week, tab_today = st.tabs(
-        ["🗺 Full", "📅 Month", "📖 Week", "✅ Today"]
+    # Handle view switching with URL params or default to current week/day
+    view_week = st.query_params.get("week", st.session_state.current_week)
+    view_day = st.query_params.get("day", st.session_state.current_day)
+    
+    try:
+        view_week = int(view_week)
+        view_day = int(view_day)
+    except (ValueError, TypeError):
+        view_week = st.session_state.current_week
+        view_day = st.session_state.current_day
+    
+    active_view = st.radio(
+        "View:",
+        options=["full", "month", "week", "today"],
+        format_func=lambda x: {"full":"🗺 Full",
+                               "month":"📅 Month",
+                               "week":"📖 Week",
+                               "today":"✅ Today"}[x],
+        horizontal=True,
+        index=["full", "month", "week", "today"].index(
+            st.session_state.active_view),
+        key="view_radio"
     )
 
+    if active_view != st.session_state.active_view:
+        st.session_state.active_view = active_view
+        st.rerun()
+
     # -------- FULL VIEW (previous roadmap) --------
-    with tab_full:
+    if st.session_state.active_view == "full":
+        st.query_params["week"] = st.session_state.current_week
+        st.query_params["day"] = st.session_state.current_day
+
         for m in range(1, 4):
             st.subheader(f"Month {m}")
-            st.markdown(f"**{st.session_state.months.get(f'Month {m}', 'No action')}**")
+            st.markdown(f"**{st.session_state.months.get(f'Month_{m}', 'No action')}**")
             week_cols = st.columns(4)
             for j in range(4):
-                wk = (m - 1) * 4 + j + 1
-                active = wk == st.session_state.current_week
-                week_action = st.session_state.weeks.get(f"Week {wk}", "No milestone here")
-                if active:
-                    label = (f":large_green_circle: Week {wk}: " + week_action)
-                else:
-                    label = (f"Week {wk}: " + week_action)
-                key = f"wk{wk}_btn"
-                if week_cols[j].button(label, key=key, disabled=not active):
-                    st.session_state.current_week = wk
-                    st.session_state.page = "roadmap"        # stay in dashboard
-                    st.session_state.current_day = 1
+                wk_num   = (m - 1) * 4 + j + 1
+                week_txt = st.session_state.weeks.get(f"Week_{wk_num}", "No milestone")
+                green    = "🟢" if wk_num == st.session_state.current_week else ""
+                label    = f"{green} Week {wk_num}: {week_txt}"
+                key      = f"wk_btn_{wk_num}"
+
+                # Clicking ➜ set query params, switch to Week tab
+                if week_cols[j].button(label, key=key):
+                    st.query_params["week"] = wk_num
+                    st.query_params["day"] = 1
+                    st.session_state.active_view = "week"
                     st.rerun()
+
+    elif st.session_state.active_view == "month":
+        wk_active   = int(st.session_state.current_week)
+        month_index = (wk_active - 1) // 4 + 1
+        st.header(f"Month {month_index}")
+        st.markdown(f"### {st.session_state.months.get(f'Month_{month_index}', 'No action')}")
+        col_m = st.columns(4)
+        for idx in range(4):
+            wk_num = (month_index - 1) * 4 + idx + 1
+            with col_m[idx]:
+                render_week_block(wk_num, mode="month")
+
+    # -------- WEEK VIEW --------
+    elif st.session_state.active_view == "week":
+        render_week_block(view_week, mode="week")
+
+    # -------- TODAY VIEW --------
+    elif st.session_state.active_view == "today":
+        render_day_block(view_week, int(view_day))
 
     with st.expander("Show Raw AI Response and lists"):
         st.text(st.session_state.raw_text)
         st.text(st.session_state.weeks)
         st.text(st.session_state.months)
 
-    # -------- MONTH VIEW --------
-    with tab_month:
-        wk = int(st.session_state.current_week)
-        active_month = math.ceil(wk / 4)
-        st.header(f"Month {active_month}")
-        st.markdown(f"### {st.session_state.months.get(f'Month {active_month}', 'No action')}")
-
-        col_m = st.columns(4)
-        for idx in range(4):
-            wk_num = (active_month - 1) * 4 + idx + 1
-            with col_m[idx]:
-                render_week_block(wk_num, mode = "month")
-
-    # -------- WEEK VIEW --------
-    with tab_week:
-        wk = int(st.session_state.current_week)
-        render_week_block(wk, mode="week")
-
-    # -------- TODAY VIEW --------
-    with tab_today:
-        wk = int(st.session_state.current_week)
-        day = int(st.session_state.current_day)
-        render_day_block(wk, day)
+    render_footer()
 
 def render_login_page():
     st.title("The 90-Day Goal Engineer")
-    st.image("image1.png", caption="You in a week easily", width=800)
+    st.image("image1.png", width=800)
+    st.markdown("**☝️ save this page so you don't have to re-login**")
 
-    cached_user, cached_password = load_local_creds()
-    if cached_user and cached_password:
-        ok, _ = signup_or_login(cached_user, cached_password)   # validates password
-        if ok:
-            st.session_state.username = cached_user
-            has_plan = load_plan(cached_user)
-            if has_plan:
-                st.session_state.page = "roadmap"
-            else:
-                st.session_state.page = "input"
-            st.rerun()
-            return  # stop here
-        pass
+    if "access_token" in st.query_params and "refresh_token" in st.query_params:
+        at = st.query_params["access_token"]
+        rt = st.query_params["refresh_token"]
+
+        try:
+            supabase.auth.set_session(at, rt)
+            user = supabase.auth.get_user()
+            if user and user.user.email:
+                st.session_state.username = user.user.email
+                has_plan = load_plan(st.session_state.username)
+                if has_plan:
+                    st.success("plan loaded")
+                    st.session_state.page = "roadmap"
+                else:
+                    st.session_state.page = "input"
+                st.rerun()
+        except Exception as e:
+            st.warning(f"Session restore failed: {e}")
 
     st.markdown('## Sign Up / Login (Very easy)')
     username = st.text_input("Username")
@@ -285,12 +265,9 @@ def render_login_page():
             ok, message = signup_or_login(username, password)
             st.info(message)
             if ok:
-                save_local_creds(username, password)
-                st.session_state.username = username
-                time.sleep(2)
-                # load plan → decide destination
                 has_plan = load_plan(username)
                 if has_plan:
+                    st.success("plan loaded")
                     st.session_state.page = "roadmap"
                 else:
                     st.session_state.page = "input"
@@ -299,8 +276,8 @@ def render_login_page():
             st.warning("please put in a username and password")
 
 def sign_out():
-    clear_local_creds()
     st.session_state.clear()
+    st.query_params.clear()  # clears token from browser URL
     st.session_state.page = "login"
     time.sleep(2)
     st.rerun()
@@ -317,9 +294,9 @@ if 'super_goal' not in st.session_state:
 if 'super_goal_input' not in st.session_state:
     st.session_state.super_goal_input = ""
 if 'profile_input' not in st.session_state:
-    st.session_state.profile_input = ""
+    st.session_state.profile_input = None
 if 'profile' not in st.session_state:
-    st.session_state.profile = ""
+    st.session_state.profile = None
 
 if 'raw_text' not in st.session_state:
     st.session_state.raw_text = ""
@@ -328,7 +305,11 @@ if 'months' not in st.session_state:
     st.session_state.months = {}
 if 'weeks' not in st.session_state:
     st.session_state.weeks = {}
+if 'all_weeks' not in st.session_state:
+    st.session_state.all_weeks = {}
 
+if "active_view" not in st.session_state:
+    st.session_state.active_view = "full" 
 if 'selected_milestone' not in st.session_state:
     st.session_state.selected_milestone = None
 if 'milestone_notes' not in st.session_state:
@@ -336,12 +317,14 @@ if 'milestone_notes' not in st.session_state:
 if 'milestone_progress' not in st.session_state:
     st.session_state.milestone_progress = {}
 
-if 'all_weeks' not in st.session_state:
-    st.session_state.all_weeks = {}
+
 if 'current_day' not in st.session_state:
     st.session_state.current_day = 1
 if 'current_week' not in st.session_state:
     st.session_state.current_week = 1
+if 'start_date' not in st.session_state:
+    st.session_state.start_date = None
+
 
 
 # 4) Improved page‐state logic

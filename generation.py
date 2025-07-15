@@ -1,11 +1,15 @@
+#This is generation.py
+
 import streamlit as st
 import openai
+import os
+
 import re
 import feedparser
 import time
 
 # OpenAI configuration
-openai_api_key = st.secrets.get("OPENAI_API_KEY")
+openai.api_key = st.secrets.get("OPENAI_API_KEY")
 model = "gpt-4o"
 
 # 1) Generate a 90-day plan via GPT
@@ -44,13 +48,13 @@ def parse(text):
     for i in range(1, 4):
         match = re.search(rf"Month {i} Action:(.*?)(?=Month \d|Week \d|$)", text, re.IGNORECASE | re.DOTALL)
         if match:
-            result["month_list"][f"Month {i}"] = match.group(1).strip()
+            result["month_list"][f"Month_{i}"] = match.group(1).strip()
 
     # Extract weekly milestones
     for i in range(1, 13):
         match = re.search(rf"Week {i} Milestone:(.*?)(?=Week \d|Month \d|$)", text, re.IGNORECASE | re.DOTALL)
         if match:
-            result["week_list"][f"Week {i}"] = match.group(1).strip()
+            result["week_list"][f"Week_{i}"] = match.group(1).strip()
 
     return result
 
@@ -140,48 +144,6 @@ def regenerate_milestone(week_num, current_milestone, difficulty_change, super_g
             return new_milestone + " (Not clean)"
     except Exception as e:
         st.error(f"Error regenerating milestone: {e}")
-        return None
-
-# 5) Generate 2 daily steps, currently obselete
-def generate_daily_steps(week_num, current_milestone, current_day, super_goal):
-    prompt = f"""
-    Week {week_num} Milestone: {current_milestone}
-    Super Goal Context: {super_goal}
-    
-    Generate exactly 2 actionable daily steps for Day {current_day} for completing this weekly milestone.
-    
-    Requirements:
-    - Daily step must be specific enough with 7-10 words
-    - Steps must focus on actually getting what the milestone says done
-    - Each step should take 40-60 minutes to complete
-    - No generic advice, instead be concrete and specific
-    
-    Format your response as:
-    Day {current_day} Step 1: [action step]
-    Day {current_day} Step 2: [action step]
-    """
-    st.markdown(prompt, unsafe_allow_html = True)
-
-    try:
-        response = openai.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": "You are an expert at making specific daily actions from a singular weekly goal."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-        )
-        daily_steps_text = response.choices[0].message.content.strip()
-        steps = {}
-        step_1_match = re.search(r"Day 1 Step 1:(.*?)(?=Day 1 Step 2|$)", daily_steps_text, re.DOTALL)
-        step_2_match = re.search(r"Day 1 Step 2:(.*?)$", daily_steps_text, re.DOTALL)
-        if step_1_match:
-            steps["step_1"] = step_1_match.group(1).strip()
-        if step_2_match:
-            steps["step_2"] = step_2_match.group(1).strip()
-        return steps
-    except Exception as e:
-        st.error(f"Error generating daily steps: {e}")
         return None
 
 #the real one for generating daily steps
@@ -292,7 +254,7 @@ test_structure_dictionary = {
 def inline_text_input(before_text, after_text, first_column, placeholder, key="input_key"):
     col1, col2, col3 = st.columns([first_column, 9, 4])
     col1.markdown(f"<span style='font-size:1.3rem; font-weight:700;'>{before_text}</span>", unsafe_allow_html=True)
-    user_input = col2.text_input(placeholder=placeholder, label="", label_visibility="collapsed", key=key)
+    user_input = col2.text_input(placeholder=placeholder, label=".", label_visibility="collapsed", key=key)
     col3.markdown(f"<span style='font-size:1.3rem; font-weight:700;'>{after_text}</span>", unsafe_allow_html=True)
     return user_input
 
