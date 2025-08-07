@@ -3,8 +3,8 @@
 import streamlit as st
 from supabase import create_client, Client
 import json
-import os
 import datetime as _dt
+from gotrue.errors import AuthApiError
 
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
@@ -17,33 +17,38 @@ supabase = get_supabase()
 
 def signup_or_login(email: str, password):
     """Create user if new; otherwise validate password. Uses Supabase auth token."""
+    username = email.strip().lower()
+
     try:
-        username = email.strip().lower()
         result = supabase.auth.sign_in_with_password({"email": username, "password": password})
-    except Exception:
-        result = supabase.auth.sign_up({"email": username, "password": password})
-        supabase.table("user_plans").insert({
-            "user_id":   username,
-            "password":  password,
-            "start_date": _dt.date.today().isoformat(),
-            "raw_text":  "",
-            "months":    json.dumps({}),
-            "weeks":     json.dumps({}),
-            "all_weeks": json.dumps({}),
-            "super_goal": ""
-        }).execute()
+        msg = "Logged in."
+
+    except AuthApiError:
+        try:
+            result = supabase.auth.sign_up({"email": username, "password": password})
+            supabase.table("user_plans").insert({
+                "user_id":   username,
+                "password":  password,
+                "start_date": _dt.date.today().isoformat(),
+                "raw_text":  "",
+                "months":    json.dumps({}),
+                "weeks":     json.dumps({}),
+                "all_weeks": json.dumps({}),
+                "super_goal": "",
+                "banner_url": ""
+            }).execute()
+            msg = "Account made"
+
+        except AuthApiError as e:
+            if "User already registered" in str(e):
+                return False, "Wrong password."
+            else:
+                return False, f"Auth error: {e}"
 
     st.query_params["access_token"] = result.session.access_token
     st.query_params["refresh_token"] =result.session.refresh_token
-
-    #This is setting up sessions state username if not token
     st.session_state.username = username
-    return True, "Logged in."
-
-    stored_password = row.data[0]["password"]
-    if stored_password == password:     # login path
-        return True, "Logged-in."
-    return False, "Wrong password."
+    return True, msg
 
 def load_plan(user_id):
     row = supabase.table("user_plans").select("*").eq("user_id", user_id).single().execute()
@@ -55,7 +60,8 @@ def load_plan(user_id):
     st.session_state.months    = json.loads(row.data["months"])
     st.session_state.weeks     = json.loads(row.data["weeks"])
     st.session_state.all_weeks = json.loads(row.data["all_weeks"])
-    st.session_state.super_goal = row.data["super_goal"]
+    st.session_state.super_goal = row.data.get("super_goal", "")
+    st.session_state.banner_url = row.data.get("banner_url", "") #emtpy strings are falsy
     return bool(st.session_state.raw_text)   # ← TRUE only if a real plan exists
 
 #SAVING every time there are major plan changes like task edits
@@ -67,6 +73,7 @@ def save_plan(user_id):
         "weeks": json.dumps(st.session_state.weeks),
         "all_weeks": json.dumps(st.session_state.all_weeks),
         "super_goal": st.session_state.super_goal,
+        "banner_url": st.session_state.get("banner_url", "")
     }).eq("user_id", user_id).execute()
 
 
@@ -83,6 +90,14 @@ def get_or_init_start_date(user_id: str) -> _dt.date:
 def set_start_date(user_id: str, new_date: _dt.date):
     supabase.table("user_plans").update({"start_date": new_date.isoformat()}).eq("user_id", user_id).execute()
 
+def upload_banner(user_id: str, data: bytes) -> str:
+    file_path = f"{user_id}/banner.png"
+    supabase.storage.from_("banners").upload(
+        file_path,
+        data,
+        {'upsert':'true',})
+    public_url_response = supabase.storage.from_("banners").get_public_url(file_path)
+    return public_url_response
 
 #autosave, does work in local testing
 """

@@ -1,4 +1,28 @@
-#These functions are all obselete and have been removed from original scripts
+base_prompt = f"""
+    Please help me design a 1536:512 landscape dashboard banner for this super goal: {super_goal}
+    If the original super goal text is has more than 12 words or has complex wording:
+    - adapt to to a banner title by removing excessive details
+    - keep the keywords and a key number
+    - focus on practical action verbs (eg. reach, learn, make) ignore common english sentence structure
+    The optimized super goal title is placed in the top-left overlay in a clean, bold title font.
+    The main element of the banner is the cartoon:
+    - The theme of the goal should be illustrated with a primary subject
+    - The story telling is complete through lighthearted and humurous states and actions
+    - ONLY if suitable, humour can be convyed with exaggerated body proportions, especially through contrast with multiple characters
+    Specific artistic choice for the cartoon: 
+    - Simple and bold look for characters, settings, and props
+    - No background wash
+    - Preferably consistent line style: Thick, black outlines with rounded ends; no sketchy or variable stroke.
+    - Selective colour. Keep most lines black on white; use 1‑2 accent colours only for goal‑defining items (eg. youtube plaque, computer)
+    """
+    
+edit_prompt = f"""
+    Focus on first landscape banner for my super goal: {super_goal}
+    - Ensure it's size is 1536:512
+    - Ensure alignment between the banner and the theme of the goal
+    - Tweak the style of the banner to align more with the two reference images provided: NAMELY the character style, contrasting and humurous details, and detailing
+    - Make sure the palette remains simpel and only serves as an accent for goal-defining details
+    """
 
 #This was to generate the daily steps in generation.py
 def generate_daily_steps(week_num, current_milestone, current_day, super_goal):
@@ -53,7 +77,7 @@ def render_roadmap_page():
     if st.button("Sign Out Completely", key="roadmap_sign_out_button"):
         sign_out()
     st.image("image1.png", caption="Roadmap reference", width=1000)
-    st.expander("Forgot what your goal was?"):
+    with st.expander("Forgot what your goal was?"):
         st.text(st.session_state.super_goal)
     st.markdown("---")
     st.header("Your 90-Day Road")

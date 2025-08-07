@@ -8,7 +8,6 @@ import re
 import feedparser
 import time
 
-# OpenAI configuration
 openai.api_key = st.secrets.get("OPENAI_API_KEY")
 model = "gpt-4o"
 
@@ -147,7 +146,7 @@ def regenerate_milestone(week_num, current_milestone, difficulty_change, super_g
         return None
 
 #the real one for generating daily steps
-def generate_steps_better(week_num, current_milestone, current_day, super_goal, week_days):
+def generate_steps_better(week_num, current_milestone, current_day, super_goal, week_days = list[list]):
     """
     week_days: list of days for this week, where each day is the list: [[task text, bool], [task text 2, bool]]
     """
@@ -250,10 +249,54 @@ test_structure_dictionary = {
         * Week milestones must have same brutal concision, don't worry about intepretation (if numbers and periods are there)"""
 }
 
+# --- NEW: banner generatorNOT CURRENTLY BEING USED
+def generate_banner(super_goal: str, reference_ids):
+    """
+    One‑shot 800×300 banner that visually matches the user's super goal.
+    Saves nothing – just returns raw PNG bytes.
+    reference_ids = image IDs of local reference files already in /static
+    """
+    prompt = f"""
+    Please help me design a landscape dashboard banner for this super goal: {super_goal}
+
+    If the original super goal text is has more than 12 words or has complex wording:
+    - shorten the title by removing excessive details
+    - keep the keywords and key numbers (eg. subscriber target)
+    - focus on practical action verbs (eg. reach, learn, make) ignore common english sentence structure
+
+    The optimized super goal title is placed in the top-left overlay in a clean, bold title font.
+
+    The main element of the banner is the cartoon:
+    - The theme of the goal should be illustrated with a primary subject
+    - The story telling is complete through lighthearted and humurous states and actions
+    - ONLY if suitable, humour can be convyed with exaggerated body proportions, especially through contrast with multiple characters
+
+    Specific artistic choice for the cartoon: 
+    - Simple and bold look for characters, settings, and props
+    - No background wash
+    - Preferably consistent line style: Thick, black outlines with rounded ends; no sketchy or variable stroke.
+    - Selective colour. Keep most lines black on white; use 1‑2 accent colours only for goal‑defining items (eg. youtube plaque, computer)
+    - The stylization, palette, and detailing can imitate the reference images provided
+    """
+
+    st.markdown(prompt, unsafe_allow_html = True)
+
+    # Convert local reference files to byte‑buffers OpenAI will accept
+    refs = [{"image": open(p, "rb").read()} for p in reference_ids] if reference_ids else None
+
+    rsp = openai.images.generate(
+        model = "gpt-image-1",
+        prompt       = prompt,
+        size         = "1536x1024",
+        n            = 1         # must use OpenAI ≥ v1.30
+    )
+    return base64.b64decode(rsp.data[0].b64_json)
+
 # 6) Custom inline text input for the input page
 def inline_text_input(before_text, after_text, first_column, placeholder, key="input_key"):
     col1, col2, col3 = st.columns([first_column, 9, 4])
     col1.markdown(f"<span style='font-size:1.3rem; font-weight:700;'>{before_text}</span>", unsafe_allow_html=True)
+    #HERES what the user puts in
     user_input = col2.text_input(placeholder=placeholder, label=".", label_visibility="collapsed", key=key)
     col3.markdown(f"<span style='font-size:1.3rem; font-weight:700;'>{after_text}</span>", unsafe_allow_html=True)
     return user_input

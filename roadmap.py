@@ -1,6 +1,7 @@
 #This is roadmap.py
 
 import streamlit as st
+import traceback
 import math
 import time
 import datetime as _dt
@@ -10,8 +11,11 @@ st.set_page_config(page_title="90-Day Goal Engineer", layout="wide", initial_sid
 
 
 from generation import plan, parse, inline_text_input, render_footer, test_structure_dictionary
+from bannergeneration import try_generate_banner, async_generate_and_upload
+from concurrent.futures import ThreadPoolExecutor
+
 from milestone import render_day_block, render_week_block, update_progress
-from supabasecode import signup_or_login, load_plan, save_plan, set_start_date
+from supabasecode import signup_or_login, load_plan, save_plan, set_start_date, upload_banner
 from supabasecode import supabase
 
 def compute_day_week():
@@ -56,8 +60,16 @@ def render_input_page():
         month_structure = structure_dictionary[structure_options]
 
     if st.button("Lock in my Plan 😤", type="primary"):
-        st.session_state.super_goal = "Super Goal: I want to " + st.session_state.super_goal_input + " in 90 days."
-        st.session_state.profile = "For better context I am a " + st.session_state.profile_input + "."
+        st.session_state.super_goal = (f"Super Goal: I want to {st.session_state.super_goal_input} in 90 days."
+            if st.session_state.super_goal_input
+            else ""
+            )
+
+        st.session_state.profile = (
+            f"For better context I am a {st.session_state.profile_input}."
+            if st.session_state.profile_input            # truthy → build the sentence
+            else ""                                      # falsy → keep it blank
+            )
 
         if st.session_state.super_goal:
             with st.spinner("Be Patient..."):
@@ -70,19 +82,51 @@ def render_input_page():
                     parsed_plan = parse(raw_text)
                     st.session_state.months = parsed_plan["month_list"]
                     st.session_state.weeks = parsed_plan["week_list"]
-                    st.session_state.page = 'roadmap'
                     save_plan(st.session_state.username)
+
+                    st.session_state.page = 'roadmap'
                     st.rerun()
         else:
             st.warning("Please enter your Super Goal first!", icon="⚠️")
 
     render_footer()
 
-# This comes before the roadmap at all times
+# This comes before the roadmap tables at all times
 def show_progress_boss():
     week_num = st.session_state.current_week
     day_num = st.session_state.current_day
     week_key = f"Week_{week_num}"
+
+    st.markdown(f"## {st.session_state.get("super_goal", "none!")}")
+
+    #Banner for supergoal:
+    if st.session_state.banner_url:
+        st.image(st.session_state.banner_url)
+        if st.button("🔄 Regenerate banner"):
+            st.session_state.banner_url = None
+            st.rerun()
+
+    # Kick off a new generation
+    elif st.session_state.banner_future is None:
+        if st.button("📷 Make me a banner"):
+            executor = ThreadPoolExecutor(max_workers=1)
+            st.session_state.banner_future = executor.submit(
+                async_generate_and_upload,
+                st.session_state.super_goal,
+                st.session_state.username,
+            )
+            st.rerun()
+
+    # Poll the running thread
+    else:
+        future = st.session_state.banner_future
+        if future.done():
+            st.session_state.banner_url = future.result()  # safe: now main thread
+            st.session_state.banner_future = None
+            save_plan(st.session_state.username)
+            st.rerun()
+        else:
+            st.info("Generating banner…")
 
     #BOSS state based on completed/total tasks made PROGRESS
     st.markdown(f"## Your boss for Week {week_num} Day {day_num}")
@@ -115,7 +159,7 @@ def show_progress_boss():
         st.markdown(f"{notes}")
 
 def render_dashboard():
-    st.title("🎯 90-Day Goal Engineer")
+    st.title("🎯 90-Day Goal Roadmap")
     
     if st.button("Create New Plan", key="new_plan_button"):
         st.info("new plan started")
@@ -123,12 +167,11 @@ def render_dashboard():
         st.session_state.page = 'input'
         st.rerun()
     if st.button("Sign Out Completely", key="roadmap_sign_out_button"):
-        sign_out() 
+        sign_out()
 
     compute_day_week()
     st.markdown(
-        f"### 📆 Day **{st.session_state.current_day}**  |  "
-        f"Week **{st.session_state.current_week}**"
+        f"### 📆 Day **{st.session_state.current_day}**  |  Week **{st.session_state.current_week}**"
     )
     col_b, col_r, col_f = st.columns(3)
 
@@ -150,12 +193,10 @@ def render_dashboard():
         st.session_state.start_date = new_start
         st.rerun()
 
-
-    #NOT show if day view using psuedocode selection
     if st.session_state.active_view == "full" or st.session_state.active_view == "month" or st.session_state.active_view == "week":
         show_progress_boss()
 
-    # Handle view switching with URL params or default to current week/day
+    # Handle specific week or day view using URL params or default to current week/day
     view_week = st.query_params.get("week", st.session_state.current_week)
     view_day = st.query_params.get("day", st.session_state.current_day)
     
@@ -235,9 +276,9 @@ def render_dashboard():
 def render_login_page():
     st.title("The 90-Day Goal Engineer")
     st.image("image1.png", width=800)
-    st.markdown("**☝️ save this page so you don't have to re-login**")
+    st.markdown("**☝️ save this tokenized page so you don't have to re-login**")
 
-    if "access_token" in st.query_params and "refresh_token" in st.query_params and "username" not in st.session_state:
+    if "access_token" in st.query_params and "refresh_token" in st.query_params:
         at = st.query_params["access_token"]
         rt = st.query_params["refresh_token"]
 
@@ -257,10 +298,13 @@ def render_login_page():
             st.warning(f"Session restore failed: {e}")
 
     st.markdown('## Sign Up / Login (Very easy)')
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submit_button = st.form_submit_button("Continue")
 
-    if st.button("Continue"):
+    if submit_button:
         if username and password:
             ok, message = signup_or_login(username, password)
             st.info(message)
@@ -294,12 +338,15 @@ if 'super_goal' not in st.session_state:
 if 'super_goal_input' not in st.session_state:
     st.session_state.super_goal_input = ""
 if 'profile_input' not in st.session_state:
-    st.session_state.profile_input = None
+    st.session_state.profile_input = ""
 if 'profile' not in st.session_state:
-    st.session_state.profile = None
+    st.session_state.profile = ""
 
 if 'raw_text' not in st.session_state:
     st.session_state.raw_text = ""
+if "banner_future" not in st.session_state:
+    st.session_state.banner_future = None
+
 #months and weeks are dictionaries
 if 'months' not in st.session_state:
     st.session_state.months = {}
