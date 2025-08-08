@@ -5,6 +5,7 @@ from io import BytesIO
 
 from supabasecode import upload_banner, save_plan
 import traceback
+import streamlit as st
 
 #Google genai
 key = st.secrets.get("GOOGLE_API_KEY")
