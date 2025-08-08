@@ -2,3 +2,5 @@ streamlit
 openai
 supabase
 feedparser
+google-genai
+pillow
