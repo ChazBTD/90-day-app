@@ -29,7 +29,11 @@ def try_generate_banner(super_goal: str) -> bytes:
     - Simple and bold look for characters, settings, and props
     - Preferably consistent line style: Thick, black outlines with rounded ends; no sketchy or variable stroke.
     - No background wash. Simple Palette: Most lines are black on white; 1‑2 selective colours fills only as accent for goal‑defining items (eg. youtube plaque, computer)
+    
+    Style alignment:
     - Tweak the style of the banner to align more with the two reference images provided: NAMELY the character style, contrasting and humurous details, and detailing
+    The first image's super goal text was: I want to learn how to vibecode in 90 days.
+    The second image's super goal text was: I want reach 100,000 followers on yt for my productivity channel in 90 days.
     """
 
     # Load reference images
@@ -38,7 +42,7 @@ def try_generate_banner(super_goal: str) -> bytes:
 
     response = client.models.generate_content(
         model="gemini-2.0-flash-preview-image-generation",
-        contents=[prompt, img1],
+        contents=[prompt, img1, img2],
         config=types.GenerateContentConfig(
             response_modalities=['TEXT', 'IMAGE']
         )
