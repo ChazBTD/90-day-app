@@ -7,7 +7,8 @@ from supabasecode import upload_banner, save_plan
 import traceback
 
 #Google genai
-client = genai.Client(api_key = st.secrets.get("GOOGLE_API_KEY"))
+key = st.secrets.get("GOOGLE_API_KEY")
+client = genai.Client(api_key = key)
 
 def try_generate_banner(super_goal: str) -> bytes:
     prompt = f"""
