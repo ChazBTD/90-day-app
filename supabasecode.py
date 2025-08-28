@@ -4,7 +4,6 @@ import streamlit as st
 from supabase import create_client, Client
 import json
 import datetime as _dt
-from supabase.lib.auth_client import AuthApiError
 
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
@@ -30,7 +29,7 @@ def signup_or_login(email: str, password):
         result = supabase.auth.sign_in_with_password({"email": username, "password": password})
         msg = "Logged in."
 
-    except AuthApiError as e:
+    except Exception as e:
         # Catch specific errors to distinguish between login failure and a new user.
         error_message = str(e)
         
@@ -57,7 +56,7 @@ def signup_or_login(email: str, password):
                 
                 msg = "Account created. You can now log in."
 
-            except AuthApiError as signup_e:
+            except Exception as signup_e:
                 # This will catch errors during signup, like "User already registered".
                 if "User already registered" in str(signup_e):
                     # This case should technically not be reached with the new logic,
@@ -66,7 +65,6 @@ def signup_or_login(email: str, password):
                 else:
                     return False, f"Signup failed: {signup_e}"
         else:
-            # Handle other AuthApiErrors (e.g., rate-limiting, disabled email provider).
             return False, f"Login failed: {e}"
 
     # After a successful login or signup, set session variables
