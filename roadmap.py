@@ -1,6 +1,7 @@
 #This is roadmap.py
 
 import streamlit as st
+import pandas as pd
 import traceback
 import math
 import time
@@ -9,8 +10,9 @@ import datetime as _dt
 #this has to come before st.cache and other stuff is initiated
 st.set_page_config(page_title="90-Day Goal Engineer", layout="wide", initial_sidebar_state="collapsed")
 
+from goodprompt import structure_dictionary #move values to banner generation soon
+from generation import plan, parse, inline_text_input, render_footer
 
-from generation import plan, parse, inline_text_input, render_footer, test_structure_dictionary
 from bannergeneration import try_generate_banner, async_generate_and_upload
 from concurrent.futures import ThreadPoolExecutor
 
@@ -18,11 +20,39 @@ from milestone import render_day_block, render_week_block, update_progress
 from supabasecode import signup_or_login, load_plan, save_plan, set_start_date, upload_banner
 from supabasecode import supabase
 
+df = pd.DataFrame(st.session_state.items(), columns=["Key", "Value"])
+st.dataframe(
+    df,
+    column_config={
+        "Key": st.column_config.Column(
+            "Session Variable", # Custom column header
+            width=150, # Adjust this value to set the width
+        ),
+        "Value": st.column_config.Column(
+            "Current Value",
+            width=300, # Adjust this value to set the width
+        )
+    }
+)
+
 def compute_day_week():
     delta = (_dt.date.today() - st.session_state.start_date).days
     delta = max(0, delta)                        # never negative
     st.session_state.current_week = delta // 7 + 1
     st.session_state.current_day  = delta % 7 + 1
+
+def reset_day_week():
+    today = _dt.date.today()
+    set_start_date(st.session_state.username, today)
+    st.session_state.start_date = today
+
+def sign_out():
+    st.session_state.clear()
+    st.query_params.clear()  # clears token from browser URL
+    st.session_state.page = "login"
+    time.sleep(2)
+    st.rerun()
+
 
 # 1) Render the “input” page where user defines super goal, profile, etc.
 def render_input_page():
@@ -31,17 +61,14 @@ def render_input_page():
 
     st.markdown("---")
     goal = inline_text_input("I want to", "in 90 days.", 1,
-        "build a software startup newsletter and scale it to 1000 target audiences (college students who want to build viral apps.)",
-        key="super_goal_input"
+        "(Anything) build a startup newsletter and scale it to 1000 target audiences",
+        key="super_goal"
     )
     profile = inline_text_input(
         "For more context, I am a", "", 2.8,
-        "product manager for a 50-people B2B SAAS with 5 years experience", 
+        "(Tell me anything) product manager for a 50-people SAAS, 5 years experience", 
         key="profile_input"
     )
-
-    # Predefined structures (if user checks “Use Structure”)
-    structure_dictionary = test_structure_dictionary
 
     use_structure = st.checkbox(
         "Use Structure", 
@@ -60,13 +87,10 @@ def render_input_page():
         month_structure = structure_dictionary[structure_options]
 
     if st.button("Lock in my Plan 😤", type="primary"):
-        st.session_state.super_goal = (f"Super Goal: I want to {st.session_state.super_goal_input} in 90 days."
-            if st.session_state.super_goal_input
-            else ""
-            )
+        #can I remove this helper variable?
 
         st.session_state.profile = (
-            f"For better context I am a {st.session_state.profile_input}."
+            f"For better context: I am a {st.session_state.profile_input}."
             if st.session_state.profile_input            # truthy → build the sentence
             else ""                                      # falsy → keep it blank
             )
@@ -76,8 +100,14 @@ def render_input_page():
                 #CALLING the PLAN with one necesary variable
                 raw_text = plan(st.session_state.super_goal, st.session_state.profile, month_structure)
                 if raw_text:
-                    #first clear all daily actions
+                    st.info("plan exsists")
+                    #first clear all daily actions, START DATE, banner url, notes
+                    st.session_state.banner_url = ""
                     st.session_state.all_weeks = {}
+                    st.session_state.milestone_notes = {}
+                    reset_day_week()
+
+                    st.info("parsing started")
                     st.session_state.raw_text = raw_text
                     parsed_plan = parse(raw_text)
                     st.session_state.months = parsed_plan["month_list"]
@@ -86,6 +116,8 @@ def render_input_page():
 
                     st.session_state.page = 'roadmap'
                     st.rerun()
+                else:
+                    st.info("NO plan returned")
         else:
             st.warning("Please enter your Super Goal first!", icon="⚠️")
 
@@ -104,7 +136,6 @@ def show_progress_boss():
         st.image(st.session_state.banner_url)
         if st.button("🔄 Regenerate banner"):
             st.session_state.banner_url = None
-            st.rerun()
 
     # Kick off a new generation
     elif st.session_state.banner_future is None:
@@ -126,7 +157,7 @@ def show_progress_boss():
             save_plan(st.session_state.username)
             st.rerun()
         else:
-            st.info("Generating banner…")
+            st.info("Generating... you can leave for now")
 
     #BOSS state based on completed/total tasks made PROGRESS
     st.markdown(f"## Your boss for Week {week_num} Day {day_num}")
@@ -175,6 +206,7 @@ def render_dashboard():
     )
     col_b, col_r, col_f = st.columns(3)
 
+    #these back 1 day controllers should be illegal
     if col_b.button("⬅️ Back 1 day"):
         new_start = st.session_state.start_date + _dt.timedelta(days=1)
         set_start_date(st.session_state.username, new_start)
@@ -182,10 +214,7 @@ def render_dashboard():
         st.rerun()
 
     if col_r.button("🔄 Reset Day 1 → Today"):
-        today = _dt.date.today()
-        set_start_date(st.session_state.username, today)
-        st.session_state.start_date = today
-        st.rerun()
+        reset_day_week()
 
     if col_f.button("➡️ Forward 1 day"):
         new_start = st.session_state.start_date - _dt.timedelta(days=1)
@@ -318,14 +347,6 @@ def render_login_page():
                 st.rerun()
         else:
             st.warning("please put in a username and password")
-
-def sign_out():
-    st.session_state.clear()
-    st.query_params.clear()  # clears token from browser URL
-    st.session_state.page = "login"
-    time.sleep(2)
-    st.rerun()
-
 #Initialization
 
 
@@ -335,8 +356,6 @@ if 'page' not in st.session_state:
 
 if 'super_goal' not in st.session_state:
     st.session_state.super_goal = ""
-if 'super_goal_input' not in st.session_state:
-    st.session_state.super_goal_input = ""
 if 'profile_input' not in st.session_state:
     st.session_state.profile_input = ""
 if 'profile' not in st.session_state:
@@ -352,6 +371,8 @@ if 'months' not in st.session_state:
     st.session_state.months = {}
 if 'weeks' not in st.session_state:
     st.session_state.weeks = {}
+
+#all_weeks is a dictionary of lists with Week_x keys, where each have lists of tasks and completion boolean
 if 'all_weeks' not in st.session_state:
     st.session_state.all_weeks = {}
 
@@ -384,9 +405,6 @@ elif page == 'login':
     render_login_page()
 elif page == 'roadmap':
     render_dashboard()
-#I can basically cancel the milestone page system for the tab switch version
-elif page == 'milestone':
-    render_milestone_page()
 else:
     st.error("Unknown page state!")
     st.session_state.page = 'login'

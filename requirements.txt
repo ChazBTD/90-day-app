@@ -2,3 +2,7 @@ streamlit
 openai
 supabase
 feedparser
+google-genai
+PIL
+numpy
+pandas

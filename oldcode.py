@@ -1,3 +1,5 @@
+
+#This is all old code, this is the old image generatin prompt
 base_prompt = f"""
     Please help me design a 1536:512 landscape dashboard banner for this super goal: {super_goal}
     If the original super goal text is has more than 12 words or has complex wording:

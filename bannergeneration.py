@@ -6,16 +6,14 @@ from io import BytesIO
 from supabasecode import upload_banner, save_plan
 import traceback
 
-#Google genai
-client = genai.Client(api_key = st.secrets.get("GOOGLE_API_KEY"))
+#key = st.secrets.get("GOOGLE_API_KEY")
+client = genai.Client(api_key = "AIzaSyCE82Ffxys1wsjOA53ZRC52KydYcCtOgYk")
 
 def try_generate_banner(super_goal: str) -> bytes:
     prompt = f"""
-    Please help me design a 1536:512 landscape dashboard banner for this super goal: {super_goal}
-    If the original super goal text is has more than 12 words or has complex wording:
-    - adapt to to a banner title by removing excessive details
-    - keep the keywords and a key number
-    - focus on practical action verbs (eg. reach, learn, make) ignore common english sentence structure
+    Please help me design a 1536:512 landscape dashboard banner for my super goal: {super_goal}
+    Reduce the complexity of the original wording if needed, keep the most important keywords or numbers I mentioned.
+    You can just ignore English grammar conventions to make the action sentence short and practical   
 
     The optimized super goal title is placed in the top-left overlay in a clean, bold title font.
     The main element of the banner is the cartoon:
@@ -27,12 +25,16 @@ def try_generate_banner(super_goal: str) -> bytes:
     - Simple and bold look for characters, settings, and props
     - Preferably consistent line style: Thick, black outlines with rounded ends; no sketchy or variable stroke.
     - No background wash. Simple Palette: Most lines are black on white; 1‑2 selective colours fills only as accent for goal‑defining items (eg. youtube plaque, computer)
+
+    Style alignment:
     - Tweak the style of the banner to align more with the two reference images provided: NAMELY the character style, contrasting and humurous details, and detailing
+    The first image's super goal text was: I want to learn how to vibecode in 90 days.
     """
 
     # Load reference images
     img1 = Image.open("reference.png")
     img2 = Image.open("reference2.png")
+    img3 = Image.open("reference3.png")
 
     response = client.models.generate_content(
         model="gemini-2.0-flash-preview-image-generation",

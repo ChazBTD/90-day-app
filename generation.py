@@ -1,30 +1,31 @@
 #This is generation.py
 
 import streamlit as st
-import openai
+from openai import OpenAI
 import os
 
 import re
 import feedparser
 import time
 
-openai.api_key = st.secrets.get("OPENAI_API_KEY")
+from goodprompt import test_prompt
+
 model = "gpt-4o"
+client = OpenAI(api_key="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")
 
 # 1) Generate a 90-day plan via GPT
-def plan(goal, profile=None, structure=None):
-
+def plan(goal: str, profile="", structure=""):
     prompt = test_prompt(goal, profile, structure)
     st.markdown(prompt, unsafe_allow_html=True)
     try:
-        response = openai.chat.completions.create(
+        response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": "You are built to break down large and ambitious goals into distinct steps using the exact 90-day framework given by the user prompt."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.5,
-        )
+            temperature=0.7,
+            )
         plan_text = response.choices[0].message.content.strip()
         return plan_text
     except openai.AuthenticationError:
@@ -57,55 +58,6 @@ def parse(text):
 
     return result
 
-# 3) Build the GPT prompt
-def test_prompt(test_goal, test_profile, test_structure=""):
-    return f"""
-        Read my 90-day 'Super Goal' and reverse-engineer a plan with **distinct steps**
-
-        {test_goal}
-        {test_profile}
-
-        Required Final Output:
-        *Generate 3 Monthly Actions. Format the output ONLY as follows, with each action on a new line*
-
-        Month 1 Action: Action text for Month 1...
-        Month 2 Action: Action text for Month 2...
-        Month 3 Action: Action text for Month 3...
-
-        *Then, Generate 12 Weekly Milestones (4 for each Month in order). Format the output ONLY as follows, with each milestone on a new line*
-
-        Week 1 Milestone: Milestone text for Week 1...
-        Week 2 Milestone: Milestone text for Week 2...
-        Week 3 Milestone: Milestone text for Week 3...
-        Week 4 Milestone: Milestone text for Week 4...
-
-        Week 5 Milestone: Milestone text for Week 5...
-        Week 6 Milestone: Milestone text for Week 6...
-        Week 7 Milestone: Milestone text for Week 7...
-        Week 8 Milestone: Milestone text for Week 8...
-
-        Week 9 Milestone: Milestone text for Week 9...
-        Week 10 Milestone: Milestone text for Week 10...
-        Week 11 Milestone: Milestone text for Week 11...
-        Week 12 Milestone: Milestone text for Week 12...
-
-        Output Guidelines:
-        * Monthly actions must be concise with 4 to 7 keywords.
-        {test_structure}
-        * Week milestones break down the 3 Monthly actions and flow logically:
-            - Weeks 1 to 4 support Month 1 Action
-            - Weeks 5 to 8 support Month 2 Action
-            - Weeks 9 to 12 support Month 3 Action
-        * Specific Instructions for generating weekly milestones under each Month group:
-            - Each milestone must be achievable within one week and be distinct from other milestones
-            - Each weekly milestone must be hyperspecific and target the exact action with the concise context (location, platform, tool, or people)
-            - Choose two weeks to be quantitative, almost like programming a robot.
-            - Choose two weeks to be boldly prescriptive and uncomfortably specific to break the ice for me
-            - After writing down each milestone, ensure it follows the specificity standards
-            - Never use generalities like “define target audience.” Instead, use statements like \"Turn X poll into 10-pro interview\"
-        * The bottom line is to follow each item listed in the Required Output with zero tolerance for off-topic discussions.
-        """
-
 # 4) Regenerate a weekly milestone with altered difficulty
 def regenerate_milestone(week_num, current_milestone, difficulty_change, super_goal):
     difficulty_instruction = {
@@ -127,7 +79,7 @@ def regenerate_milestone(week_num, current_milestone, difficulty_change, super_g
 
     st.markdown(prompt, unsafe_allow_html = True)
     try:
-        response = openai.chat.completions.create(
+        response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": "You are an expert at making specific, and actionable weekly milestones by focusing down from larger plans."},
@@ -198,7 +150,7 @@ def generate_steps_better(week_num, current_milestone, current_day, super_goal, 
     st.markdown(prompt, unsafe_allow_html=True)
 
     try:
-        response = openai.chat.completions.create(
+        response = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": "You are an expert at making specific daily steps from a singular weekly goal."},
@@ -228,69 +180,6 @@ def generate_steps_better(week_num, current_milestone, current_day, super_goal, 
     except Exception as e:
         st.error(f"Error generating daily steps: {e}")
         return None
-
-test_structure_dictionary = {
-    "Planning → Execution → Iterate": """* Specific montly structure:
-        - Month 1: Planning and trial
-        - Month 2: Brutaland specific execution
-        - Month 3: Evaluate and iterate on better parts of work""",
-    "Specific Action + Reflect ×3": """* Specific montly structure:
-        - Month 1: (Ditch all planning-based language): Weirdly hyperspecific action first three weeks and a clear reflection for last week to specific to that weird action
-        - Month 2: Different hyperspecific action with the same exact shocking pattern (action -> toppling reflection)
-        - Month 3: Another interesting hyperspecific action with the same exact shocking pattern (action -> toppling reflection)""",
-    "Explore → Exploit → Expand": """* Specific montly structure:
-        - Month 1: Unique and structured exploration of super goal (specific methods, objectives, audience)
-        - Month 2: Highly leverage intial knowledge and resources to take specific actions
-        - Month 3: Expand from these actions for better apporahc, then final narrowing executions on last 2 weeks""",
-    "Crack Mode": """* Crack mode on. For each month, Generate HYPERSPECIFIC targets like an emotionless bloodbath machine
-        - Month 1: Slice open a target so hard it seems impossible.
-        - Month 2: Assume I've gotten ahead, now it's all a brutal numbers game
-        - Month 3: Blow my goals away with hyperscaled completion, metrics, and outreach
-        * Week milestones must have same brutal concision, don't worry about intepretation (if numbers and periods are there)"""
-}
-
-# --- NEW: banner generatorNOT CURRENTLY BEING USED
-def generate_banner(super_goal: str, reference_ids):
-    """
-    One‑shot 800×300 banner that visually matches the user's super goal.
-    Saves nothing – just returns raw PNG bytes.
-    reference_ids = image IDs of local reference files already in /static
-    """
-    prompt = f"""
-    Please help me design a landscape dashboard banner for this super goal: {super_goal}
-
-    If the original super goal text is has more than 12 words or has complex wording:
-    - shorten the title by removing excessive details
-    - keep the keywords and key numbers (eg. subscriber target)
-    - focus on practical action verbs (eg. reach, learn, make) ignore common english sentence structure
-
-    The optimized super goal title is placed in the top-left overlay in a clean, bold title font.
-
-    The main element of the banner is the cartoon:
-    - The theme of the goal should be illustrated with a primary subject
-    - The story telling is complete through lighthearted and humurous states and actions
-    - ONLY if suitable, humour can be convyed with exaggerated body proportions, especially through contrast with multiple characters
-
-    Specific artistic choice for the cartoon: 
-    - Simple and bold look for characters, settings, and props
-    - No background wash
-    - Preferably consistent line style: Thick, black outlines with rounded ends; no sketchy or variable stroke.
-    - Selective colour. Keep most lines black on white; use 1‑2 accent colours only for goal‑defining items (eg. youtube plaque, computer)
-    - The stylization, palette, and detailing can imitate the reference images provided
-    """
-
-    st.markdown(prompt, unsafe_allow_html = True)
-
-    # Convert local reference files to byte‑buffers OpenAI will accept
-    refs = [{"image": open(p, "rb").read()} for p in reference_ids] if reference_ids else None
-
-    rsp = openai.images.generate(
-        model = "gpt-image-1",
-        prompt       = prompt,
-        size         = "1536x1024",
-        n            = 1         # must use OpenAI ≥ v1.30
-    )
-    return base64.b64decode(rsp.data[0].b64_json)
 
 # 6) Custom inline text input for the input page
 def inline_text_input(before_text, after_text, first_column, placeholder, key="input_key"):

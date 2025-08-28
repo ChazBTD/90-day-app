@@ -6,47 +6,81 @@ import json
 import datetime as _dt
 from gotrue.errors import AuthApiError
 
-SUPABASE_URL = st.secrets.get("SUPABASE_URL")
-SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
+#SUPABASE_URL = st.secrets.get("SUPABASE_URL")
+#SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
+
+SUPABASE_URL = "https://csaaokrnymethjnqikor.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzYWFva3JueW1ldGhqbnFpa29yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg4Mzc3NDQsImV4cCI6MjA2NDQxMzc0NH0.GEn7FIxFT5ZPny8fl9p2cIkzf2DqC3x2BLVN5aaS-ts"
 
 @st.cache_resource
 def get_supabase():
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    # Use AuthRetryableError for network-related issues
+    try:
+        return create_client(SUPABASE_URL, SUPABASE_KEY)
+    except AuthRetryableError as e:
+        # This will be triggered by network/DNS issues like the one you saw.
+        st.error(f"Network error connecting to Supabase: {e}. Please check your internet connection.")
+        return None
 
 supabase = get_supabase()
 
 def signup_or_login(email: str, password):
-    """Create user if new; otherwise validate password. Uses Supabase auth token."""
+    """
+    Attempts to log in an existing user.
+    If login fails due to a user not existing, it falls back to a signup process.
+    """
     username = email.strip().lower()
 
+    if not supabase:
+        return False, "Database connection failed."
+
     try:
+        # 1. Attempt to log in with the provided credentials.
         result = supabase.auth.sign_in_with_password({"email": username, "password": password})
         msg = "Logged in."
 
-    except AuthApiError:
-        try:
-            result = supabase.auth.sign_up({"email": username, "password": password})
-            supabase.table("user_plans").insert({
-                "user_id":   username,
-                "password":  password,
-                "start_date": _dt.date.today().isoformat(),
-                "raw_text":  "",
-                "months":    json.dumps({}),
-                "weeks":     json.dumps({}),
-                "all_weeks": json.dumps({}),
-                "super_goal": "",
-                "banner_url": ""
-            }).execute()
-            msg = "Account made"
+    except AuthApiError as e:
+        # Catch specific errors to distinguish between login failure and a new user.
+        error_message = str(e)
+        
+        # Check if the login failed because the user doesn't exist
+        if "Invalid login credentials" in error_message:
+            st.write("User not found. Attempting to sign up...")
+            try:
+                # 2. If login fails for an unknown user, attempt to sign them up.
+                result = supabase.auth.sign_up({"email": username, "password": password})
+                
+                # IMPORTANT: This is a security risk. Storing a plaintext password
+                # in your table should be removed once testing is complete.
+                supabase.table("user_plans").insert({
+                    "user_id": username,
+                    "password": password,
+                    "start_date": _dt.date.today().isoformat(),
+                    "raw_text": "",
+                    "months": json.dumps({}),
+                    "weeks": json.dumps({}),
+                    "all_weeks": json.dumps({}),
+                    "super_goal": "",
+                    "banner_url": ""
+                }).execute()
+                
+                msg = "Account created. You can now log in."
 
-        except AuthApiError as e:
-            if "User already registered" in str(e):
-                return False, "Wrong password."
-            else:
-                return False, f"Auth error: {e}"
+            except AuthApiError as signup_e:
+                # This will catch errors during signup, like "User already registered".
+                if "User already registered" in str(signup_e):
+                    # This case should technically not be reached with the new logic,
+                    # but it's a good fallback to handle race conditions or other issues.
+                    return False, "This email is already registered."
+                else:
+                    return False, f"Signup failed: {signup_e}"
+        else:
+            # Handle other AuthApiErrors (e.g., rate-limiting, disabled email provider).
+            return False, f"Login failed: {e}"
 
+    # After a successful login or signup, set session variables
     st.query_params["access_token"] = result.session.access_token
-    st.query_params["refresh_token"] =result.session.refresh_token
+    st.query_params["refresh_token"] = result.session.refresh_token
     st.session_state.username = username
     return True, msg
 
@@ -81,7 +115,8 @@ def save_plan(user_id):
 def get_or_init_start_date(user_id: str) -> _dt.date:
     row = supabase.table("user_plans").select("start_date").eq("user_id", user_id).single().execute()
     raw = row.data.get("start_date")
-    if not raw:                                  # handle old accounts
+    #Since the signup sets the start date, this is the handle old accounts
+    if not raw:                                  
         today = _dt.date.today()
         supabase.table("user_plans").update({"start_date": today.isoformat()}).eq("user_id", user_id).execute()
         return today
