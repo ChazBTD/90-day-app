@@ -4,22 +4,16 @@ import streamlit as st
 from supabase import create_client, Client
 import json
 import datetime as _dt
-from gotrue.errors import AuthApiError
+from supabase.lib.auth_client import AuthApiError
 
 SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
 @st.cache_resource
-def get_supabase():
-    # Use AuthRetryableError for network-related issues
-    try:
-        return create_client(SUPABASE_URL, SUPABASE_KEY)
-    except AuthRetryableError as e:
-        # This will be triggered by network/DNS issues like the one you saw.
-        st.error(f"Network error connecting to Supabase: {e}. Please check your internet connection.")
-        return None
+def get_supabase() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
 
-supabase = get_supabase()
+supabase = get_supabase(SUPABASE_URL, SUPABASE_KEY)
 
 def signup_or_login(email: str, password):
     """

@@ -3,6 +3,6 @@ openai
 supabase
 feedparser
 google-genai
-PIL
+pillow
 numpy
 pandas
