@@ -10,8 +10,9 @@ import time
 
 from goodprompt import test_prompt
 
+key = st.secrets.get("OPENAI_API_KEY")
 model = "gpt-4o"
-client = OpenAI(api_key="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")
+client = OpenAI(api_key=key)
 
 # 1) Generate a 90-day plan via GPT
 def plan(goal: str, profile="", structure=""):
@@ -29,7 +30,7 @@ def plan(goal: str, profile="", structure=""):
         plan_text = response.choices[0].message.content.strip()
         return plan_text
     except openai.AuthenticationError:
-        st.error("Server Authentication Error. Check your API key configuration.", icon="🚨")
+        st.error("Server Authentication Error. That guy needs to check API key configuration.", icon="🚨")
         return None
     except openai.RateLimitError:
         st.error("SERVER Rate Limit Exceeded. Please wait and try again or check your plan.")

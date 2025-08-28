@@ -6,11 +6,8 @@ import json
 import datetime as _dt
 from gotrue.errors import AuthApiError
 
-#SUPABASE_URL = st.secrets.get("SUPABASE_URL")
-#SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
-
-SUPABASE_URL = "https://csaaokrnymethjnqikor.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzYWFva3JueW1ldGhqbnFpa29yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg4Mzc3NDQsImV4cCI6MjA2NDQxMzc0NH0.GEn7FIxFT5ZPny8fl9p2cIkzf2DqC3x2BLVN5aaS-ts"
+SUPABASE_URL = st.secrets.get("SUPABASE_URL")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
 @st.cache_resource
 def get_supabase():

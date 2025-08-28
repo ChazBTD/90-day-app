@@ -4,8 +4,10 @@ import numpy as np
 import streamlit as st
 from typing import List, Dict
 
+
+key = st.secrets.get("OPENAI_API_KEY")
 EMBED_MODEL = "text-embedding-3-small"
-client = OpenAI(api_key="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")
+client = OpenAI(api_key=key)
 
 # 1) Your 10 archetypes (goal + months + week) without the ending "in 90 days."
 EXAMPLES: List[Dict] = [
