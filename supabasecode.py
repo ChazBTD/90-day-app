@@ -9,8 +9,8 @@ SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY")
 
 @st.cache_resource
-def get_supabase() -> Client:
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+def get_supabase(url, key) -> Client:
+    return create_client(url, key)
 
 supabase = get_supabase(SUPABASE_URL, SUPABASE_KEY)
 
