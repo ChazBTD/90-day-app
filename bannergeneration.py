@@ -3,8 +3,8 @@ from google.genai import types
 from PIL import Image
 from io import BytesIO
 
+import streamlit as st
 from supabasecode import upload_banner, save_plan
-import traceback
 
 key = st.secrets.get("GOOGLE_API_KEY")
 client = genai.Client(api_key = key)
